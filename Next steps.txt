@@ -1,0 +1,19 @@
+val:
+
+
+
+C:
+LotShape
+LandContour
+Utilities
+LotConfig
+LandSlope
+Neighborhood
+Condition1	(can be simplified)
+Condition2
+BldgType
+
+
+Functional: normal vs other
+Condition1 and Condition2
+search for interaction terms
