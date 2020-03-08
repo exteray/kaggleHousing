@@ -19,31 +19,22 @@ from keras.models import Sequential
 from keras.layers import Dense
 from keras.wrappers.scikit_learn import KerasRegressor
 from sklearn.compose import ColumnTransformer
-from sklearn.datasets import fetch_openml
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import KFold
 import sklearn.feature_selection
-import statsmodels.api as sm # import statsmodels 
-import statsmodels.formula.api as smf
-from statsmodels.formula.api import ols
 import numpy as np
 import matplotlib.pyplot as plt
-from statsmodels.graphics.api import abline_plot
-
-from pandas import read_csv
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
-from sklearn.preprocessing import OneHotEncoder
 
 #supress futurewrning
 
 # import warnings filter
 from warnings import simplefilter
+
+logTransform = False
 # ignore all future warnings
 simplefilter(action='ignore', category=FutureWarning)
 
@@ -59,8 +50,11 @@ seed = 7
 
 X = df_train.drop('SalePrice', axis=1)
 y = df_train['SalePrice']
+if logTransform:
+    y = np.log(y)
 X_test = df_test
 X_combined = pd.concat([X, X_test])
+numInTrain = X.shape[0]
 
 # split into train and test sets
 # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=seed)
@@ -80,6 +74,13 @@ categorical_features = ['MSSubClass', 'MSZoning','SaleType', 'LotShape', 'LandCo
                         'Electrical', 'KitchenQual', 'Functional', 'GarageType', 'PavedDrive', 'PoolQC', 'YearRemodAdd'                
                                ]
 
+categorical_features = ['MSSubClass', 'MSZoning','SaleType', 'LotShape', 'LandSlope', 
+                        'Neighborhood', 'SaleCondition',
+                        'Exterior1st', 'MasVnrType', 'ExterQual', 'ExterCond', 
+                        'BsmtQual', 'BsmtCond',  'Heating', 'HeatingQC', 'CentralAir', 
+                        'Electrical', 'KitchenQual', 'Functional', 'GarageType', 'PavedDrive', 'PoolQC', 'YearRemodAdd'                
+                               ]
+
 categorical_transformer = Pipeline(steps=[
     ('imputer', SimpleImputer(strategy='constant', fill_value='missing')),
     ('onehot', OneHotEncoder(handle_unknown='ignore'))])
@@ -89,13 +90,13 @@ preprocessor = ColumnTransformer(
         ('num', numeric_transformer, numeric_features),
         ('cat', categorical_transformer, categorical_features)])
 
+'''
 X_combined_proc = preprocessor.fit(X_combined).transform(X_combined)
-numInTrain = X.shape[0]
+
 X_train_proc = X_combined_proc[:numInTrain, :]
 X_test_proc = X_combined_proc[numInTrain:, :]
+'''
 
-# preprocess training data and test data together, so that the onehotEncoder 
-# would encompass cateogories in both datasets
 ''' PREPRCOESS: NUMERIC
 '''
 X_combined_num = X_combined[numeric_features]
@@ -120,29 +121,28 @@ X_train_proc = X_combined_proc[:numInTrain]
 X_test_proc = X_combined_proc[numInTrain:]
 
 # see what the best features are, using univariate criterion from regression
-select = sklearn.feature_selection.SelectKBest(k=30)
+numTopFeatures=100
+select = sklearn.feature_selection.SelectKBest(k=numTopFeatures)
 selected_features = select.fit(X_train_proc,y)
 indices_selected = selected_features.get_support(indices=True)
 colnames_selected = list(X_train_proc.columns[i] for i  in indices_selected)
 
+X_train_proc = X_train_proc[colnames_selected]
+X_test_proc = X_test_proc[colnames_selected]
 
-
-''' CODE WORKS UP TO HERE
-'''
 
 # define base model
 def baseline_model(optimizer='rmsprop', init='glorot_uniform'):
 	# create model
     model = Sequential()
-    model.add(Dense(118, input_dim=118, kernel_initializer='normal', activation='relu'))
-    model.add(Dense(30, kernel_initializer='normal', activation='relu'))
-    model.add(Dense(10, kernel_initializer='normal', activation='relu'))
+    model.add(Dense(100, input_dim=100, kernel_initializer='normal', activation='relu'))
+    model.add(Dense(50, kernel_initializer='normal', activation='relu'))
+    model.add(Dense(15, kernel_initializer='normal', activation='relu'))
     model.add(Dense(1, kernel_initializer='normal'))
 	# Compile model
     model.compile(loss='mean_squared_error', optimizer='adam')
     return model
 
-input_dim = X_combined_proc.shape[1]
 model = KerasRegressor(build_fn=baseline_model, epochs=150, batch_size=5, verbose=0)
 pipeline = Pipeline(steps=[
                         #('preprocessor', preprocessor), #preprossed already with the combined X data
@@ -155,8 +155,19 @@ kfold = KFold(n_splits=10, shuffle=True, random_state=seed)
 results = cross_val_score(pipeline, X_train_proc, y, cv=kfold)
 print("Standardized: %f (%f)" % (np.log(-results).mean(), np.log(-results).std()*100))
 
+''' Use the model to predict for X_test
+'''
+model.fit(X_train_proc, y)
+prediction = model.predict(X_train_proc)
+prediction_test = model.predict(X_test_proc)
+if logTransform:
+    prediction = np.exp(prediction)
+    prediction_test = np.exp(prediction_test)
+    plt.scatter(np.exp(y), prediction)
+else:
+    plt.scatter(y, prediction)
 
-
+breakpoint()
 
 # grid search epochs, batch size and optimizer
 '''
@@ -187,10 +198,6 @@ for mean, stdev, param in zip(means, stds, params):
 
 
 
-model.fit(X_train_proc, y)
-prediction = model.predict(X_train_proc)
-prediction_test = model.predict(X_test_proc)
-plt.scatter(y, prediction)
 #accuracy_score(Y_test, prediction)
 
 #potential improvements

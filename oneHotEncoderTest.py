@@ -12,9 +12,10 @@ df_enc = pd.read_csv(r'C:\Users\exter\OneDrive\Documents\My Programs\Kaggle\Hous
                       +r'\train.csv')
 
 cols = ['MSSubClass', 'Street']
+cat_cols = ['MSSubClass', 'Street']
 df_enc = df_enc[cols]
 
-enc = OneHotEncoder(handle_unknown='ignore')
+enc = OneHotEncoder( handle_unknown='ignore')
 enc.fit(df_enc)
 enc.categories_
 

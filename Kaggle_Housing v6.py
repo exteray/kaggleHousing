@@ -25,9 +25,9 @@ from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split, GridSearchCV
+
 from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import KFold
-import sklearn.feature_selection
 import statsmodels.api as sm # import statsmodels 
 import statsmodels.formula.api as smf
 from statsmodels.formula.api import ols
@@ -40,13 +40,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import OneHotEncoder
 
-#supress futurewrning
-
-# import warnings filter
-from warnings import simplefilter
-# ignore all future warnings
-simplefilter(action='ignore', category=FutureWarning)
-
 df_train = pd.read_csv(r'C:\Users\exter\OneDrive\Documents\My Programs\Kaggle\Housing Price Competition'\
                       +r'\train.csv')
 df_test = pd.read_csv(r'C:\Users\exter\OneDrive\Documents\My Programs\Kaggle\Housing Price Competition'\
@@ -54,6 +47,36 @@ df_test = pd.read_csv(r'C:\Users\exter\OneDrive\Documents\My Programs\Kaggle\Hou
 # example of one hot encoding for a neural network
 
 seed = 7
+
+# load the dataset
+def load_dataset(df):
+	# retrieve numpy array
+	dataset = df.values
+	# split into input (X) and output (y) variables
+	X = dataset[:, :-1]
+	y = dataset[:,-1]
+	# format all fields as string
+	X = X.astype(str)
+	# reshape target to be a 2d array
+	y = y.reshape((len(y), 1))
+	return X, y
+
+# prepare input data
+def prepare_inputs(X_train, X_test):
+	ohe = OneHotEncoder()
+	ohe.fit(X_train)
+	X_train_enc = ohe.transform(X_train)
+	X_test_enc = ohe.transform(X_test)
+	return X_train_enc, X_test_enc
+
+# prepare target
+def prepare_targets(y_train, y_test):
+	le = LabelEncoder()
+	le.fit(y_train)
+	y_train_enc = le.transform(y_train)
+	y_test_enc = le.transform(y_test)
+	return y_train_enc, y_test_enc
+
 # load the dataset
 # X, y = load_dataset(df_train)
 
@@ -68,18 +91,12 @@ X_combined = pd.concat([X, X_test])
 # X_train_enc, X_test_enc = prepare_inputs(X_train, X_test)
 
 # We create the preprocessing pipelines for both numeric and categorical data.
-numeric_features = ['GrLivArea', 'OverallQual', 'MiscVal', 'OverallCond',  'TotRmsAbvGrd']
+numeric_features = ['GrLivArea', 'OverallQual']
 numeric_transformer = Pipeline(steps=[
     ('imputer', SimpleImputer(strategy='median')),
     ('scaler', StandardScaler())])
 
-categorical_features = ['MSSubClass', 'MSZoning','SaleType', 'LotShape', 'LandContour', 'Utilities', 'LandSlope', 
-                        'Neighborhood', 'Condition1', 'Condition2', 'BldgType', 'HouseStyle', 'YrSold', 'SaleCondition',
-                        'RoofStyle', 'RoofMatl', 'Exterior1st', 'Exterior2nd', 'MasVnrType', 'ExterQual', 'ExterCond', 
-                        'Foundation', 'BsmtQual', 'BsmtCond', 'BsmtExposure', 'BsmtFinType1', 'Heating', 'HeatingQC', 'CentralAir', 
-                        'Electrical', 'KitchenQual', 'Functional', 'GarageType', 'PavedDrive', 'PoolQC', 'YearRemodAdd'                
-                               ]
-
+categorical_features = ['GarageType', 'MSSubClass', 'SaleType']
 categorical_transformer = Pipeline(steps=[
     ('imputer', SimpleImputer(strategy='constant', fill_value='missing')),
     ('onehot', OneHotEncoder(handle_unknown='ignore'))])
@@ -89,53 +106,21 @@ preprocessor = ColumnTransformer(
         ('num', numeric_transformer, numeric_features),
         ('cat', categorical_transformer, categorical_features)])
 
+# preprocess training data and test data together, so that the onehotEncoder 
+# would encompass cateogories in both datasets
 X_combined_proc = preprocessor.fit(X_combined).transform(X_combined)
 numInTrain = X.shape[0]
 X_train_proc = X_combined_proc[:numInTrain, :]
 X_test_proc = X_combined_proc[numInTrain:, :]
-
-# preprocess training data and test data together, so that the onehotEncoder 
-# would encompass cateogories in both datasets
-''' PREPRCOESS: NUMERIC
-'''
-X_combined_num = X_combined[numeric_features]
-X_combined_num = numeric_transformer.fit(X_combined_num).transform(X_combined_num)
-X_combined_num = pd.DataFrame(data=X_combined_num, columns=numeric_features)
-
-''' PERPROCESS: CATEGORICAL
-'''
-X_combined_cat = X_combined[categorical_features]
-simpImp = SimpleImputer(strategy='constant', fill_value='missing')
-simpImp.fit(X_combined_cat)
-X_combined_cat = pd.DataFrame(data=simpImp.transform(X_combined_cat ), columns=X_combined_cat.columns)
-enc = OneHotEncoder(handle_unknown='ignore')
-enc.fit(X_combined_cat)
-enc.categories_
-catCols = enc.get_feature_names(categorical_features)
-X_combined_cat = pd.DataFrame(data=enc.transform(X_combined_cat).toarray(), columns=catCols)
-
-# Combine numeric + categorical
-X_combined_proc = pd.concat([X_combined_num, X_combined_cat], axis=1)
-X_train_proc = X_combined_proc[:numInTrain]
-X_test_proc = X_combined_proc[numInTrain:]
-
-# see what the best features are, using univariate criterion from regression
-select = sklearn.feature_selection.SelectKBest(k=30)
-selected_features = select.fit(X_train_proc,y)
-indices_selected = selected_features.get_support(indices=True)
-colnames_selected = list(X_train_proc.columns[i] for i  in indices_selected)
-
-
-
-''' CODE WORKS UP TO HERE
-'''
+#X2.toarray() 
+# breakpoint()
 
 # define base model
-def baseline_model(optimizer='rmsprop', init='glorot_uniform'):
+def baseline_model():
 	# create model
     model = Sequential()
-    model.add(Dense(118, input_dim=118, kernel_initializer='normal', activation='relu'))
-    model.add(Dense(30, kernel_initializer='normal', activation='relu'))
+    model.add(Dense(35, input_dim=35, kernel_initializer='normal', activation='relu'))
+    model.add(Dense(15, kernel_initializer='normal', activation='relu'))
     model.add(Dense(10, kernel_initializer='normal', activation='relu'))
     model.add(Dense(1, kernel_initializer='normal'))
 	# Compile model
@@ -143,7 +128,7 @@ def baseline_model(optimizer='rmsprop', init='glorot_uniform'):
     return model
 
 input_dim = X_combined_proc.shape[1]
-model = KerasRegressor(build_fn=baseline_model, epochs=150, batch_size=5, verbose=0)
+model = KerasRegressor(build_fn=baseline_model, epochs=50, batch_size=5, verbose=0)
 pipeline = Pipeline(steps=[
                         #('preprocessor', preprocessor), #preprossed already with the combined X data
                       ('mlp', model)
@@ -151,41 +136,8 @@ pipeline = Pipeline(steps=[
     
 kfold = KFold(n_splits=10, shuffle=True, random_state=seed)
 
-
 results = cross_val_score(pipeline, X_train_proc, y, cv=kfold)
 print("Standardized: %f (%f)" % (np.log(-results).mean(), np.log(-results).std()*100))
-
-
-
-
-# grid search epochs, batch size and optimizer
-'''
-# add CV
-# Split the dataset in two equal parts
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.5, random_state=0)
-'''
-optimizers = ['rmsprop', 'adam']
-init = ['glorot_uniform', 'normal', 'uniform']
-epochs = np.array([50, 100, 150])
-batches = np.array([5, 10, 20])
-
-param_grid = dict(optimizer=optimizers, nb_epoch=epochs, batch_size=batches, init=init)
-grid = GridSearchCV(estimator=model, param_grid=param_grid)
-grid_result = grid.fit(X_train_proc, y)
-
-# summarize results
-print("Best: %f using %s" % (grid_result.best_score_, grid_result.best_params_))
-
-means = grid_result.cv_results_['mean_test_score']
-stds = grid_result.cv_results_['std_test_score']
-params = grid_result.cv_results_['params']
-
-for mean, stdev, param in zip(means, stds, params):
-    mean_n = np.log(-mean)
-    print("%f (%f) with: %r" % (mean_n, stdev, param))
-
-
 
 model.fit(X_train_proc, y)
 prediction = model.predict(X_train_proc)
@@ -196,8 +148,6 @@ plt.scatter(y, prediction)
 #potential improvements
 # add log functionTransformer to Y and some Xs
 
-#simplify some of the variables:
-# year sold: pre and post crisis
 # avoid hardcoding input_dim
 # https://stackoverflow.com/questions/47944463/specify-input-argument-with-kerasregressor
                 
